@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Epic Games & MK12 Token Helper</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #181a20;
+      color: #fff;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .container {
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+      padding: 16px;
+      box-sizing: border-box;
+      background: #23262f;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      margin-top: 24px;
+    }
+    h1 {
+      font-size: 1.3rem;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0;
+      background: #0078f2;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:disabled {
+      background: #444b5a;
+      cursor: not-allowed;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 6px;
+      border: 1px solid #333;
+      background: #1a1c22;
+      color: #fff;
+      font-size: 1rem;
+      box-sizing: border-box;
+      resize: none;
+    }
+    label {
+      font-size: 0.95rem;
+      margin-top: 12px;
+      display: block;
+    }
+    .step {
+      margin-bottom: 18px;
+    }
+    .result {
+      background: #181a20;
+      border-radius: 6px;
+      padding: 10px;
+      margin: 8px 0;
+      word-break: break-all;
+      font-size: 0.95rem;
+    }
+    @media (max-width: 450px) {
+      .container {
+        max-width: 100vw;
+        border-radius: 0;
+        margin-top: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Epic Games & MK12 Token Helper</h1>
+    <div class="step">
+      <button id="openEpic">Get Epic Games Token</button>
+      <label for="epicPaste">Paste the redirected JSON here:</label>
+      <textarea id="epicPaste" rows="3" placeholder="Paste JSON here..."></textarea>
+      <button id="extractAuthCode">Extract Authorization Code</button>
+      <div class="result" id="authCodeResult"></div>
+    </div>
+    <div class="step">
+      <button id="authorizeEpic">Authorize Epic Games</button>
+      <div class="result" id="epicTokenResult"></div>
+    </div>
+    <div class="step">
+      <button id="generateExchange">Generate Exchange Token</button>
+      <div class="result" id="exchangeTokenResult"></div>
+    </div>
+    <div class="step">
+      <button id="generateMK12">Generate MK12 Token</button>
+      <div class="result" id="mk12TokenResult"></div>
+    </div>
+    <div class="step">
+      <button id="testMK12">Test MK12 Connection</button>
+      <div class="result" id="mk12TestResult"></div>
+    </div>
+  </div>
+  <script>
+    // Step 1: Open Epic Games Auth URL
+    document.getElementById('openEpic').onclick = function() {
+      window.open('https://www.epicgames.com/id/api/redirect?clientId=34a02cf8f4414e29b15921876da36f9a&responseType=code', '_blank');
+    };
+
+    let authorizationCode = '';
+    let accessToken = '';
+    let exchangeCode = '';
+    let mk12AccessToken = '';
+
+    // Step 2: Extract authorizationCode from pasted JSON
+    document.getElementById('extractAuthCode').onclick = function() {
+      const text = document.getElementById('epicPaste').value;
+      let code = '';
+      try {
+        const obj = JSON.parse(text);
+        code = obj.authorizationCode || obj.code || '';
+        if (!code) throw new Error('authorizationCode not found');
+        authorizationCode = code;
+        document.getElementById('authCodeResult').textContent = 'Authorization Code: ' + code;
+      } catch (e) {
+        document.getElementById('authCodeResult').textContent = 'Error: ' + e.message;
+      }
+    };
+
+    // Step 3: Authorize Epic Games
+    document.getElementById('authorizeEpic').onclick = async function() {
+      if (!authorizationCode) {
+        document.getElementById('epicTokenResult').textContent = 'No authorization code.';
+        return;
+      }
+      document.getElementById('epicTokenResult').textContent = 'Requesting...';
+      try {
+  const resp = await fetch('https://corsproxy.io/?https://account-public-service-prod.ol.epicgames.com/account/api/oauth/token', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Basic ' + btoa('34a02cf8f4414e29b15921876da36f9a:daafbccc737745039dffe53d94fc76cf'),
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: new URLSearchParams({
+            grant_type: 'authorization_code',
+            code: authorizationCode
+          })
+        });
+        const data = await resp.json();
+        if (data.access_token) {
+          accessToken = data.access_token;
+          document.getElementById('epicTokenResult').textContent = 'Access Token: ' + accessToken;
+        } else {
+          document.getElementById('epicTokenResult').textContent = 'Error: ' + JSON.stringify(data);
+        }
+      } catch (e) {
+        document.getElementById('epicTokenResult').textContent = 'Error: ' + e.message;
+      }
+    };
+
+    // Step 4: Generate Exchange Token
+    document.getElementById('generateExchange').onclick = async function() {
+      if (!accessToken) {
+        document.getElementById('exchangeTokenResult').textContent = 'No access token.';
+        return;
+      }
+      document.getElementById('exchangeTokenResult').textContent = 'Requesting...';
+      try {
+  const resp = await fetch('https://corsproxy.io/?https://account-public-service-prod.ol.epicgames.com/account/api/oauth/exchange', {
+          headers: {
+            'Authorization': 'Bearer ' + accessToken
+          }
+        });
+        const data = await resp.json();
+        if (data.code) {
+          exchangeCode = data.code;
+          document.getElementById('exchangeTokenResult').textContent = 'Exchange Code: ' + exchangeCode;
+        } else {
+          document.getElementById('exchangeTokenResult').textContent = 'Error: ' + JSON.stringify(data);
+        }
+      } catch (e) {
+        document.getElementById('exchangeTokenResult').textContent = 'Error: ' + e.message;
+      }
+    };
+
+    // Step 5: Generate MK12 Token
+    document.getElementById('generateMK12').onclick = async function() {
+      if (!exchangeCode) {
+        document.getElementById('mk12TokenResult').textContent = 'No exchange code.';
+        return;
+      }
+      document.getElementById('mk12TokenResult').textContent = 'Requesting...';
+      try {
+  const resp = await fetch('https://corsproxy.io/?https://api.epicgames.dev/epic/oauth/v1/token', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Basic ' + btoa('xyza7891hmsLnBS6UDWUCpPoTIjxa9jN:KScde4nAoceiFpQqLsMVPdXj7BwTY7iF0wwp4jgcmik'),
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: new URLSearchParams({
+            deployment_id: '1e1e999a5b1348c3ad60fd7f3e1b6bad',
+            grant_type: 'exchange_code',
+            scope: 'basic_profile friends_list presence openid',
+            exchange_code: exchangeCode
+          })
+        });
+        const data = await resp.json();
+        if (data.access_token) {
+          mk12AccessToken = data.access_token;
+          document.getElementById('mk12TokenResult').textContent = 'MK12 Access Token: ' + mk12AccessToken;
+        } else {
+          document.getElementById('mk12TokenResult').textContent = 'Error: ' + JSON.stringify(data);
+        }
+      } catch (e) {
+        document.getElementById('mk12TokenResult').textContent = 'Error: ' + e.message;
+      }
+    };
+
+    // Step 6: Test MK12 Connection
+    document.getElementById('testMK12').onclick = async function() {
+      if (!mk12AccessToken) {
+        document.getElementById('mk12TestResult').textContent = 'No MK12 access token.';
+        return;
+      }
+      document.getElementById('mk12TestResult').textContent = 'Requesting...';
+      try {
+  const resp = await fetch('https://corsproxy.io/?https://k1-api.wbagora.com/access', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            auth: {
+              fail_on_missing: false,
+              epic: mk12AccessToken
+            },
+            options: [
+              'configuration',
+              'achievements',
+              'account',
+              'profile',
+              'notifications',
+              'maintenance',
+              'wb_network'
+            ]
+          })
+        });
+        const data = await resp.json();
+        document.getElementById('mk12TestResult').textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        document.getElementById('mk12TestResult').textContent = 'Error: ' + e.message;
+      }
+    };
+  </script>
+</body>
+</html>
